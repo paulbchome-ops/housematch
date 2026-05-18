@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 
 export default function AuthModal({ isOpen, onClose, onSignIn, onSignUp, authMessage }) {
   const [mode, setMode] = useState('signin');
