@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import AuthModal from './components/AuthModal.jsx';
 import ListingForm from './components/ListingForm.jsx';
 import { fallbackListings } from './data/fallbackListings.js';
