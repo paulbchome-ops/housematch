@@ -51,9 +51,9 @@ nav a { color: inherit; font-weight: 600; font-size: 14px; }
   color: white;
 }
 .hero-grid {
-  min-height: 640px;
+  min-height: 540px;
   display: grid;
-  grid-template-columns: .9fr 1fr;
+  grid-template-columns: 1.05fr .75fr;
   align-items: center;
   gap: 48px;
 }
@@ -73,12 +73,58 @@ nav a { color: inherit; font-weight: 600; font-size: 14px; }
 .search-card h3, .search-card p { margin: 0; }
 .search-card p { margin-top: 8px; color: var(--muted); }
 .form-grid { margin-top: 22px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.compact-form-grid { margin-top: 14px; }
 select, input {
   width: 100%; border: 1px solid #cbd5e1; border-radius: 14px;
   padding: 14px 16px; font: inherit; background: white;
 }
 .search-card input { margin-top: 14px; }
 .search-meta { margin-top: 12px !important; font-size: 14px; }
+.quick-search-button { margin-top: 14px; }
+.search-page {
+  padding: 56px 0 72px;
+}
+.search-page-header {
+  max-width: 760px; margin-bottom: 28px;
+}
+.search-page-header h2 {
+  margin: 8px 0 10px; font-size: 42px;
+}
+.search-page-header p { color: var(--muted); margin: 0; }
+.step-shell {
+  display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 24px; align-items: start;
+}
+.step-rail {
+  display: grid; gap: 10px; position: sticky; top: 106px;
+}
+.step-tab {
+  border: 1px solid var(--line); border-radius: 14px; background: white; color: #334155;
+  padding: 14px; display: flex; align-items: center; gap: 10px; font: inherit; font-weight: 800;
+  cursor: pointer; text-align: left;
+}
+.step-tab span {
+  width: 28px; height: 28px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center;
+  background: #e2e8f0; color: #334155; font-size: 13px;
+}
+.step-tab.active {
+  border-color: #93c5fd; background: #eff6ff; color: var(--blue-dark);
+}
+.step-tab.active span { background: var(--blue); color: white; }
+.guided-card {
+  border: 1px solid var(--line); border-radius: 24px; background: white; padding: 28px;
+  box-shadow: 0 14px 34px rgba(15,23,42,.08);
+}
+.guided-heading h3 {
+  margin: 0; font-size: 28px;
+}
+.guided-heading .eyebrow-dark { margin-bottom: 12px; }
+.step-actions {
+  display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px;
+}
+.step-actions .button:disabled {
+  opacity: .45; cursor: not-allowed;
+}
+.compact-table { margin-top: 18px; }
 .criteria-grid {
   display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px;
   margin-top: 14px;
@@ -217,8 +263,9 @@ select, input {
 
 @media (max-width: 980px) {
   nav { display: none; }
-  .hero-grid, .listing-grid, .features, .footer-grid { grid-template-columns: 1fr; }
+  .hero-grid, .step-shell, .listing-grid, .features, .footer-grid { grid-template-columns: 1fr; }
   .hero-grid { padding: 56px 0; }
+  .step-rail { position: static; grid-template-columns: repeat(3, 1fr); }
   .stats { grid-template-columns: repeat(2, 1fr); }
   .city-grid { grid-template-columns: repeat(2, 1fr); }
   .realtor-cta, .section-heading { display: block; }
@@ -231,6 +278,7 @@ select, input {
   .button-row { width: 100%; flex-wrap: wrap; }
   .button-row .button { flex: 1; }
   .form-grid, .criteria-grid, .range-pair, .stats, .city-grid, .listing-form-grid { grid-template-columns: 1fr; }
+  .step-rail { grid-template-columns: 1fr; }
   .weight-control { grid-template-columns: 1fr 1fr 44px; }
-  .hero h2, .section-heading h3, .centered-heading h3, .realtor-cta h3 { font-size: 30px; }
+  .hero h2, .search-page-header h2, .section-heading h3, .centered-heading h3, .realtor-cta h3 { font-size: 30px; }
 }
