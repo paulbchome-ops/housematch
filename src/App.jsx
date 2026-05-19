@@ -38,6 +38,11 @@ const defaultWeights = {
   work: 25,
 };
 
+const defaultSort = {
+  key: 'score',
+  direction: 'desc',
+};
+
 const skyTrainDistanceByCity = {
   Vancouver: 0.4,
   Burnaby: 0.7,
@@ -72,6 +77,17 @@ function formatPrice(listing) {
 
 function formatDistance(value) {
   return `${value.toFixed(1)} km`;
+}
+
+function formatScore(value) {
+  return `${Math.round(value)}`;
+}
+
+function formatOptionalRange(min, max, unit = '') {
+  if (min !== null && max !== null) return `${min.toLocaleString()}${unit} - ${max.toLocaleString()}${unit}`;
+  if (min !== null) return `${min.toLocaleString()}${unit}+`;
+  if (max !== null) return `up to ${max.toLocaleString()}${unit}`;
+  return 'no limit';
 }
 
 function normalizeText(value) {
@@ -148,6 +164,7 @@ export default function App() {
   const [listings, setListings] = useState([]);
   const [filters, setFilters] = useState(defaultFilters);
   const [weights, setWeights] = useState(defaultWeights);
+  const [sort, setSort] = useState(defaultSort);
   const [session, setSession] = useState(null);
   const [authOpen, setAuthOpen] = useState(false);
   const [listingFormOpen, setListingFormOpen] = useState(false);
@@ -318,6 +335,38 @@ export default function App() {
     .sort((a, b) => b.score - a.score);
   }, [filters, listings, weights]);
 
+  const sortedListings = useMemo(() => {
+    const getSortValue = (listing) => {
+      switch (sort.key) {
+        case 'title':
+          return listing.title;
+        case 'price':
+          return listing.price;
+        case 'area_sqft':
+          return listing.area_sqft;
+        case 'skyTrainDistance':
+          return listing.skyTrainDistance;
+        case 'workDistance':
+          return listing.workDistance;
+        case 'score':
+        default:
+          return listing.score;
+      }
+    };
+
+    return [...scoredListings].sort((a, b) => {
+      const first = getSortValue(a);
+      const second = getSortValue(b);
+      const direction = sort.direction === 'asc' ? 1 : -1;
+
+      if (typeof first === 'string' || typeof second === 'string') {
+        return String(first).localeCompare(String(second)) * direction;
+      }
+
+      return (Number(first) - Number(second)) * direction;
+    });
+  }, [scoredListings, sort]);
+
   async function signIn(credentials) {
     if (!supabase) return setAuthMessage('Database not configured.');
     const { error } = await supabase.auth.signInWithPassword(credentials);
@@ -362,6 +411,18 @@ export default function App() {
 
   function updateWeight(field, value) {
     setWeights((current) => ({ ...current, [field]: Number(value) }));
+  }
+
+  function updateSort(key) {
+    setSort((current) => ({
+      key,
+      direction: current.key === key && current.direction === 'desc' ? 'asc' : 'desc',
+    }));
+  }
+
+  function sortLabel(key) {
+    if (sort.key !== key) return 'Sort';
+    return sort.direction === 'asc' ? 'Ascending' : 'Descending';
   }
 
   function getSearchRequestFilters() {
@@ -434,6 +495,49 @@ export default function App() {
 
   const searchSteps = ['Basics', 'Priorities', 'Results'];
   const featuredListings = scoredListings.slice(0, 4);
+
+  function renderScoreBreakdown(listing) {
+    const minPrice = toNumber(filters.minPrice);
+    const maxPrice = toNumber(filters.maxPrice || filters.budget);
+    const minSqft = toNumber(filters.minSqft);
+    const maxSqft = toNumber(filters.maxSqft);
+    const maxSkyTrainKm = toNumber(filters.maxSkyTrainKm);
+    const maxWorkKm = toNumber(filters.maxWorkKm);
+
+    return (
+      <div className="score-popover" role="tooltip">
+        <strong>Overall {listing.score}/100</strong>
+        <p>Weighted average of the four category scores.</p>
+        <dl>
+          <div>
+            <dt>Price</dt>
+            <dd>
+              {formatScore(listing.scoreBreakdown.price)}/100 · weight {weights.price}% · {formatPrice(listing)} against {formatOptionalRange(minPrice, maxPrice)}
+            </dd>
+          </div>
+          <div>
+            <dt>Sqft</dt>
+            <dd>
+              {formatScore(listing.scoreBreakdown.squareFootage)}/100 · weight {weights.squareFootage}% · {listing.area_sqft.toLocaleString()} sqft against {formatOptionalRange(minSqft, maxSqft, ' sqft')}
+            </dd>
+          </div>
+          <div>
+            <dt>Transit</dt>
+            <dd>
+              {formatScore(listing.scoreBreakdown.skyTrain)}/100 · weight {weights.skyTrain}% · {formatDistance(listing.skyTrainDistance)} from SkyTrain{maxSkyTrainKm ? `, target ${formatDistance(maxSkyTrainKm)}` : ''}
+            </dd>
+          </div>
+          <div>
+            <dt>Work</dt>
+            <dd>
+              {formatScore(listing.scoreBreakdown.work)}/100 · weight {weights.work}% · {formatDistance(listing.workDistance)} from {filters.workLocation}{maxWorkKm ? `, target ${formatDistance(maxWorkKm)}` : ''}
+            </dd>
+          </div>
+        </dl>
+        <small>Lower price and shorter distances score higher. More square footage scores higher.</small>
+      </div>
+    );
+  }
 
   async function advanceSearchStep() {
     if (searchStep >= searchSteps.length - 2) {
@@ -609,16 +713,40 @@ export default function App() {
                       <table className="results-table">
                         <thead>
                           <tr>
-                            <th>Listing</th>
-                            <th>Price</th>
-                            <th>Sqft</th>
-                            <th>SkyTrain</th>
-                            <th>Work</th>
-                            <th>Overall score</th>
+                            <th>
+                              <button className="sort-button" type="button" onClick={() => updateSort('title')}>
+                                Listing <span>{sortLabel('title')}</span>
+                              </button>
+                            </th>
+                            <th>
+                              <button className="sort-button" type="button" onClick={() => updateSort('price')}>
+                                Price <span>{sortLabel('price')}</span>
+                              </button>
+                            </th>
+                            <th>
+                              <button className="sort-button" type="button" onClick={() => updateSort('area_sqft')}>
+                                Sqft <span>{sortLabel('area_sqft')}</span>
+                              </button>
+                            </th>
+                            <th>
+                              <button className="sort-button" type="button" onClick={() => updateSort('skyTrainDistance')}>
+                                SkyTrain <span>{sortLabel('skyTrainDistance')}</span>
+                              </button>
+                            </th>
+                            <th>
+                              <button className="sort-button" type="button" onClick={() => updateSort('workDistance')}>
+                                Work <span>{sortLabel('workDistance')}</span>
+                              </button>
+                            </th>
+                            <th>
+                              <button className="sort-button" type="button" onClick={() => updateSort('score')}>
+                                Overall score <span>{sortLabel('score')}</span>
+                              </button>
+                            </th>
                           </tr>
                         </thead>
                         <tbody>
-                          {scoredListings.map((listing) => (
+                          {sortedListings.map((listing) => (
                             <tr key={listing.id}>
                               <td>
                                 <strong>{listing.title}</strong>
@@ -628,7 +756,12 @@ export default function App() {
                               <td>{listing.area_sqft.toLocaleString()}</td>
                               <td>{formatDistance(listing.skyTrainDistance)}</td>
                               <td>{formatDistance(listing.workDistance)}</td>
-                              <td><span className="score-pill">{listing.score}</span></td>
+                              <td>
+                                <div className="score-hover" tabIndex="0">
+                                  <span className="score-pill">{listing.score}</span>
+                                  {renderScoreBreakdown(listing)}
+                                </div>
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -727,6 +860,10 @@ export default function App() {
                     <em>{listing.area_sqft} sqft</em>
                   </footer>
                   <p className="listing-score">Score {listing.score} · SkyTrain {formatDistance(listing.skyTrainDistance)} · Work {formatDistance(listing.workDistance)}</p>
+                  <div className="score-hover card-score-hover" tabIndex="0">
+                    <button className="score-detail-trigger" type="button">Score details</button>
+                    {renderScoreBreakdown(listing)}
+                  </div>
                   {listing.source_url ? (
                     <a className="button dark" href={listing.source_url} target="_blank" rel="noreferrer">View Source</a>
                   ) : (
