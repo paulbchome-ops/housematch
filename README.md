@@ -10,7 +10,7 @@ HouseMatch is a React + Supabase starter app for a Greater Vancouver rental and 
 - Listing filters
 - Authenticated listing creation flow
 - SQL migration with Row Level Security policies
-- Demo fallback data when Supabase environment variables are not yet configured
+- Database-backed listing reads and realtime refreshes from Supabase
 
 ## Connect Supabase
 
@@ -34,3 +34,4 @@ npm run dev
 - The browser app uses the publishable key only.
 - Database access is protected with Row Level Security.
 - `.env` is intentionally ignored so local credentials are not committed.
+- Listings are loaded from `public.listings`; without Supabase environment values the listing area will stay empty.

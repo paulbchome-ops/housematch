@@ -51,9 +51,9 @@ nav a { color: inherit; font-weight: 600; font-size: 14px; }
   color: white;
 }
 .hero-grid {
-  min-height: 510px;
+  min-height: 640px;
   display: grid;
-  grid-template-columns: 1.05fr .8fr;
+  grid-template-columns: .9fr 1fr;
   align-items: center;
   gap: 48px;
 }
@@ -79,6 +79,27 @@ select, input {
 }
 .search-card input { margin-top: 14px; }
 .search-meta { margin-top: 12px !important; font-size: 14px; }
+.criteria-grid {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px;
+  margin-top: 14px;
+}
+.criteria-grid label {
+  display: grid; gap: 8px; color: #334155; font-size: 13px; font-weight: 700;
+}
+.criteria-grid input, .criteria-grid select { margin-top: 0; }
+.range-pair {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;
+}
+.weight-panel {
+  display: grid; gap: 12px; margin-top: 16px; padding: 16px;
+  border: 1px solid var(--line); border-radius: 18px; background: #f8fafc;
+}
+.weight-control {
+  display: grid; grid-template-columns: minmax(120px, 1fr) 1.5fr 46px;
+  align-items: center; gap: 12px; color: #334155; font-size: 13px; font-weight: 700;
+}
+.weight-control input { margin: 0; padding: 0; accent-color: var(--blue); }
+.weight-control strong { color: var(--blue-dark); text-align: right; }
 .stats {
   display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; padding: 48px 0;
 }
@@ -95,6 +116,27 @@ select, input {
 }
 .section-heading h3, .centered-heading h3 { margin: 0; font-size: 38px; }
 .section-heading p, .centered-heading p { color: var(--muted); }
+.results-table-wrap {
+  margin-top: 28px; overflow-x: auto; border: 1px solid var(--line); border-radius: 18px;
+  background: white; box-shadow: 0 1px 2px rgba(15,23,42,.04);
+}
+.results-table {
+  width: 100%; min-width: 780px; border-collapse: collapse;
+}
+.results-table th, .results-table td {
+  padding: 16px; text-align: left; border-bottom: 1px solid #f1f5f9;
+}
+.results-table th {
+  color: #475569; font-size: 12px; letter-spacing: .04em; text-transform: uppercase;
+  background: #f8fafc;
+}
+.results-table td { color: #334155; }
+.results-table td:first-child strong { display: block; color: var(--ink); }
+.results-table td:first-child span { display: block; margin-top: 4px; color: var(--muted); font-size: 13px; }
+.score-pill {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 52px;
+  border-radius: 999px; padding: 8px 12px; background: #dcfce7; color: #166534; font-weight: 800;
+}
 .listing-grid { margin-top: 36px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
 .listing-card {
   position: relative; overflow: hidden; border-radius: 28px; background: white;
@@ -114,6 +156,9 @@ select, input {
   border-top: 1px solid #f1f5f9; color: #475569; font-style: normal; font-size: 14px;
 }
 .listing-card em { font-style: normal; }
+.listing-score {
+  margin-bottom: 16px !important; color: #334155 !important; font-size: 13px;
+}
 .cities { background: white; }
 .centered-heading { text-align: center; }
 .city-grid {
@@ -185,6 +230,7 @@ select, input {
   .nav-wrap { flex-wrap: wrap; padding: 16px 0; }
   .button-row { width: 100%; flex-wrap: wrap; }
   .button-row .button { flex: 1; }
-  .form-grid, .stats, .city-grid, .listing-form-grid { grid-template-columns: 1fr; }
+  .form-grid, .criteria-grid, .range-pair, .stats, .city-grid, .listing-form-grid { grid-template-columns: 1fr; }
+  .weight-control { grid-template-columns: 1fr 1fr 44px; }
   .hero h2, .section-heading h3, .centered-heading h3, .realtor-cta h3 { font-size: 30px; }
 }

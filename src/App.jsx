@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import AuthModal from './components/AuthModal.jsx';
 import ListingForm from './components/ListingForm.jsx';
-import { fallbackListings } from './data/fallbackListings.js';
 import { hasSupabaseConfig, supabase } from './lib/supabase.js';
 
 const cities = [
@@ -22,7 +21,47 @@ const defaultFilters = {
   propertyType: 'all',
   bedrooms: 'all',
   budget: 'all',
+  minPrice: '',
+  maxPrice: '',
+  minSqft: '',
+  maxSqft: '',
+  maxSkyTrainKm: '',
+  workLocation: 'Vancouver',
+  maxWorkKm: '',
   query: '',
+};
+
+const defaultWeights = {
+  price: 25,
+  squareFootage: 25,
+  skyTrain: 25,
+  work: 25,
+};
+
+const skyTrainDistanceByCity = {
+  Vancouver: 0.4,
+  Burnaby: 0.7,
+  Richmond: 0.9,
+  Surrey: 1.1,
+  Coquitlam: 1.3,
+  'New Westminster': 0.5,
+  'North Vancouver': 5.8,
+  'West Vancouver': 10.5,
+  Delta: 9.4,
+  Langley: 4.8,
+};
+
+const cityCoordinates = {
+  Vancouver: { lat: 49.2827, lng: -123.1207 },
+  Burnaby: { lat: 49.2488, lng: -122.9805 },
+  Richmond: { lat: 49.1666, lng: -123.1336 },
+  Surrey: { lat: 49.1913, lng: -122.849 },
+  Coquitlam: { lat: 49.2838, lng: -122.7932 },
+  'New Westminster': { lat: 49.2057, lng: -122.911 },
+  'North Vancouver': { lat: 49.3201, lng: -123.0724 },
+  'West Vancouver': { lat: 49.3286, lng: -123.1602 },
+  Delta: { lat: 49.0847, lng: -123.0586 },
+  Langley: { lat: 49.1044, lng: -122.6604 },
 };
 
 function formatPrice(listing) {
@@ -31,49 +70,137 @@ function formatPrice(listing) {
     : `$${listing.price.toLocaleString()}`;
 }
 
+function formatDistance(value) {
+  return `${value.toFixed(1)} km`;
+}
+
 function normalizeText(value) {
   return value.trim().toLowerCase();
 }
 
+function toNumber(value) {
+  const numberValue = Number(value);
+  return value === '' || value === 'all' || Number.isNaN(numberValue) ? null : numberValue;
+}
+
+function clampScore(value) {
+  return Math.max(0, Math.min(100, value));
+}
+
+function distanceBetweenCities(fromCity, toCity) {
+  const from = cityCoordinates[fromCity];
+  const to = cityCoordinates[toCity];
+  if (!from || !to) return 25;
+
+  const latKm = (from.lat - to.lat) * 111;
+  const lngKm = (from.lng - to.lng) * 111 * Math.cos(((from.lat + to.lat) / 2) * (Math.PI / 180));
+  return Math.sqrt(latKm ** 2 + lngKm ** 2);
+}
+
+function calculateRangeScore(value, min, max, preferHigher = false) {
+  if (min !== null && max !== null && max > min) {
+    const normalized = ((value - min) / (max - min)) * 100;
+    return clampScore(preferHigher ? normalized : 100 - normalized);
+  }
+
+  if (max !== null && max > 0) {
+    return clampScore(preferHigher ? (value / max) * 100 : 100 - (value / max) * 100);
+  }
+
+  if (min !== null && min > 0) {
+    return clampScore(preferHigher ? Math.min((value / min) * 100, 100) : 100);
+  }
+
+  return 100;
+}
+
+function calculateProximityScore(distance, maxDistance) {
+  if (maxDistance !== null && maxDistance > 0) {
+    return clampScore(100 - (distance / maxDistance) * 100);
+  }
+
+  return clampScore(100 - distance * 8);
+}
+
 export default function App() {
-  const [listings, setListings] = useState(fallbackListings);
+  const [listings, setListings] = useState([]);
   const [filters, setFilters] = useState(defaultFilters);
+  const [weights, setWeights] = useState(defaultWeights);
   const [session, setSession] = useState(null);
   const [authOpen, setAuthOpen] = useState(false);
   const [listingFormOpen, setListingFormOpen] = useState(false);
   const [authMessage, setAuthMessage] = useState('');
-  const [status, setStatus] = useState(hasSupabaseConfig ? 'Loading live listings…' : 'Using demo data until Supabase is configured.');
+  const [status, setStatus] = useState(
+    hasSupabaseConfig
+      ? 'Loading listings...'
+      : 'Database is not connected.',
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!supabase) return;
+    if (!supabase) {
+      setListings([]);
+      setStatus('Database is not connected.');
+      return undefined;
+    }
 
-    async function loadInitialData() {
-      const [{ data: authData }, { data, error }] = await Promise.all([
-        supabase.auth.getSession(),
-        supabase.from('listings').select('*').eq('is_published', true).order('created_at', { ascending: false }),
-      ]);
+    let isMounted = true;
 
-      setSession(authData.session);
+    async function loadListings() {
+      const { data, error } = await supabase
+        .from('listings')
+        .select('*')
+        .eq('is_published', true)
+        .order('created_at', { ascending: false });
+
+      if (!isMounted) return;
+
       if (error) {
-        setStatus(`Could not load live listings: ${error.message}`);
+        setListings([]);
+        setStatus(`Could not load listings: ${error.message}`);
         return;
       }
-      setListings(data);
-      setStatus(data.length ? 'Live listings loaded from Supabase.' : 'No live listings yet.');
+
+      setListings(data ?? []);
+      setStatus(data?.length ? 'Listings loaded.' : 'No published listings found.');
+    }
+
+    async function loadInitialData() {
+      const { data: authData } = await supabase.auth.getSession();
+      if (isMounted) setSession(authData.session);
+      await loadListings();
     }
 
     loadInitialData();
 
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: authSubscription } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
     });
 
-    return () => subscription.subscription.unsubscribe();
+    const listingsChannel = supabase
+      .channel('public:listings')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'listings' }, loadListings)
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      authSubscription.subscription.unsubscribe();
+      supabase.removeChannel(listingsChannel);
+    };
   }, []);
 
-  const filteredListings = useMemo(() => {
-    return listings.filter((listing) => {
+  const scoredListings = useMemo(() => {
+    const minPrice = toNumber(filters.minPrice);
+    const maxPrice = toNumber(filters.maxPrice || filters.budget);
+    const minSqft = toNumber(filters.minSqft);
+    const maxSqft = toNumber(filters.maxSqft);
+    const maxSkyTrainKm = toNumber(filters.maxSkyTrainKm);
+    const maxWorkKm = toNumber(filters.maxWorkKm);
+    const totalWeight = Object.values(weights).reduce((sum, value) => sum + Number(value), 0);
+    const effectiveTotalWeight = totalWeight || Object.keys(weights).length;
+
+    return listings
+      .filter((listing) => {
       const matchesListingType =
         filters.listingType === 'all' || listing.listing_type === filters.listingType;
       const matchesPropertyType =
@@ -82,25 +209,67 @@ export default function App() {
         filters.bedrooms === 'all' || listing.bedrooms >= Number(filters.bedrooms);
       const matchesBudget =
         filters.budget === 'all' || listing.price <= Number(filters.budget);
+      const matchesPriceRange =
+        (minPrice === null || listing.price >= minPrice) && (maxPrice === null || listing.price <= maxPrice);
+      const matchesSquareFootage =
+        (minSqft === null || listing.area_sqft >= minSqft) && (maxSqft === null || listing.area_sqft <= maxSqft);
+      const skyTrainDistance = skyTrainDistanceByCity[listing.city] ?? 6;
+      const workDistance = distanceBetweenCities(listing.city, filters.workLocation);
+      const matchesSkyTrain = maxSkyTrainKm === null || skyTrainDistance <= maxSkyTrainKm;
+      const matchesWork = maxWorkKm === null || workDistance <= maxWorkKm;
       const query = normalizeText(filters.query);
       const matchesQuery =
         !query ||
         normalizeText(listing.title).includes(query) ||
         normalizeText(listing.city).includes(query);
 
-      return matchesListingType && matchesPropertyType && matchesBedrooms && matchesBudget && matchesQuery;
-    });
-  }, [filters, listings]);
+      return (
+        matchesListingType &&
+        matchesPropertyType &&
+        matchesBedrooms &&
+        matchesBudget &&
+        matchesPriceRange &&
+        matchesSquareFootage &&
+        matchesSkyTrain &&
+        matchesWork &&
+        matchesQuery
+      );
+    })
+    .map((listing) => {
+      const skyTrainDistance = skyTrainDistanceByCity[listing.city] ?? 6;
+      const workDistance = distanceBetweenCities(listing.city, filters.workLocation);
+      const scoreBreakdown = {
+        price: calculateRangeScore(listing.price, minPrice, maxPrice),
+        squareFootage: calculateRangeScore(listing.area_sqft, minSqft, maxSqft, true),
+        skyTrain: calculateProximityScore(skyTrainDistance, maxSkyTrainKm),
+        work: calculateProximityScore(workDistance, maxWorkKm),
+      };
+      const score =
+        Object.entries(scoreBreakdown).reduce((sum, [key, value]) => {
+          const weight = totalWeight ? Number(weights[key]) : 1;
+          return sum + value * weight;
+        }, 0) / effectiveTotalWeight;
+
+      return {
+        ...listing,
+        skyTrainDistance,
+        workDistance,
+        score: Math.round(score),
+        scoreBreakdown,
+      };
+    })
+    .sort((a, b) => b.score - a.score);
+  }, [filters, listings, weights]);
 
   async function signIn(credentials) {
-    if (!supabase) return setAuthMessage('Add your Supabase project values first.');
+    if (!supabase) return setAuthMessage('Database not configured.');
     const { error } = await supabase.auth.signInWithPassword(credentials);
     setAuthMessage(error ? error.message : 'Logged in successfully.');
     if (!error) setAuthOpen(false);
   }
 
   async function signUp(credentials) {
-    if (!supabase) return setAuthMessage('Add your Supabase project values first.');
+    if (!supabase) return setAuthMessage('Database not configured.');
     const { error } = await supabase.auth.signUp(credentials);
     setAuthMessage(error ? error.message : 'Account created. Check your email if confirmation is enabled.');
   }
@@ -132,6 +301,10 @@ export default function App() {
 
   function updateFilter(field, value) {
     setFilters((current) => ({ ...current, [field]: value }));
+  }
+
+  function updateWeight(field, value) {
+    setWeights((current) => ({ ...current, [field]: Number(value) }));
   }
 
   return (
@@ -213,13 +386,104 @@ export default function App() {
                   <option value="1500000">$1,500,000 max</option>
                 </select>
               </div>
+              <div className="criteria-grid">
+                <label>
+                  <span>Price range</span>
+                  <div className="range-pair">
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="Min"
+                      value={filters.minPrice}
+                      onChange={(event) => updateFilter('minPrice', event.target.value)}
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="Max"
+                      value={filters.maxPrice}
+                      onChange={(event) => updateFilter('maxPrice', event.target.value)}
+                    />
+                  </div>
+                </label>
+                <label>
+                  <span>Square footage</span>
+                  <div className="range-pair">
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="Min"
+                      value={filters.minSqft}
+                      onChange={(event) => updateFilter('minSqft', event.target.value)}
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="Max"
+                      value={filters.maxSqft}
+                      onChange={(event) => updateFilter('maxSqft', event.target.value)}
+                    />
+                  </div>
+                </label>
+                <label>
+                  <span>Max SkyTrain distance</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    placeholder="Kilometres"
+                    value={filters.maxSkyTrainKm}
+                    onChange={(event) => updateFilter('maxSkyTrainKm', event.target.value)}
+                  />
+                </label>
+                <label>
+                  <span>Work location</span>
+                  <select
+                    value={filters.workLocation}
+                    onChange={(event) => updateFilter('workLocation', event.target.value)}
+                  >
+                    {cities.map((city) => <option key={city} value={city}>{city}</option>)}
+                  </select>
+                </label>
+                <label>
+                  <span>Max work distance</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    placeholder="Kilometres"
+                    value={filters.maxWorkKm}
+                    onChange={(event) => updateFilter('maxWorkKm', event.target.value)}
+                  />
+                </label>
+              </div>
+              <div className="weight-panel">
+                {Object.entries({
+                  price: 'Price',
+                  squareFootage: 'Square footage',
+                  skyTrain: 'SkyTrain proximity',
+                  work: 'Work proximity',
+                }).map(([key, label]) => (
+                  <label className="weight-control" key={key}>
+                    <span>{label}</span>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={weights[key]}
+                      onChange={(event) => updateWeight(key, event.target.value)}
+                    />
+                    <strong>{weights[key]}%</strong>
+                  </label>
+                ))}
+              </div>
               <input
                 type="text"
                 placeholder="Search by city or neighborhood"
                 value={filters.query}
                 onChange={(event) => updateFilter('query', event.target.value)}
               />
-              <p className="search-meta">{filteredListings.length} matching listings</p>
+              <p className="search-meta">{scoredListings.length} matching listings ranked by composite score</p>
             </aside>
           </div>
         </section>
@@ -238,8 +502,37 @@ export default function App() {
               <p>{status}</p>
             </div>
           </div>
+          <div className="results-table-wrap">
+            <table className="results-table">
+              <thead>
+                <tr>
+                  <th>Listing</th>
+                  <th>Price</th>
+                  <th>Sqft</th>
+                  <th>SkyTrain</th>
+                  <th>Work</th>
+                  <th>Overall score</th>
+                </tr>
+              </thead>
+              <tbody>
+                {scoredListings.map((listing) => (
+                  <tr key={listing.id}>
+                    <td>
+                      <strong>{listing.title}</strong>
+                      <span>{listing.city} · {listing.bedrooms} beds · {listing.bathrooms} baths</span>
+                    </td>
+                    <td>{formatPrice(listing)}</td>
+                    <td>{listing.area_sqft.toLocaleString()}</td>
+                    <td>{formatDistance(listing.skyTrainDistance)}</td>
+                    <td>{formatDistance(listing.workDistance)}</td>
+                    <td><span className="score-pill">{listing.score}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
           <div className="listing-grid">
-            {filteredListings.map((listing) => (
+            {scoredListings.map((listing) => (
               <article className="listing-card" key={listing.id}>
                 <img src={listing.image_url} alt={listing.title} />
                 <span>{listing.listing_type === 'rent' ? 'For Rent' : 'For Sale'}</span>
@@ -252,6 +545,7 @@ export default function App() {
                     <em>{listing.bathrooms} Baths</em>
                     <em>{listing.area_sqft} sqft</em>
                   </footer>
+                  <p className="listing-score">Score {listing.score} · SkyTrain {formatDistance(listing.skyTrainDistance)} · Work {formatDistance(listing.workDistance)}</p>
                   <button className="button dark">View Details</button>
                 </div>
               </article>
