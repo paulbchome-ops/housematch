@@ -92,7 +92,7 @@ async function fetchSource(source, searchFilters = {}) {
   const sourceUrl = buildSourceUrl(source, searchFilters);
   const response = await fetch(sourceUrl, {
     headers: {
-      'user-agent': 'HouseMatchBot/1.0 (+contact: support@housematchvancouver.ca)',
+      'user-agent': 'BCHomeMatchBot/1.0 (+contact: support@bchomeonline.ca)',
       accept: source.source_type === 'json' ? 'application/json' : 'text/html, application/rss+xml, application/xml',
     },
   });

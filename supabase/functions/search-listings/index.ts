@@ -82,7 +82,7 @@ async function fetchSource(source: Record<string, any>, searchFilters: Record<st
   const sourceUrl = buildSourceUrl(source, searchFilters);
   const response = await fetch(sourceUrl, {
     headers: {
-      'user-agent': 'HouseMatchBot/1.0 (+contact: support@housematchvancouver.ca)',
+      'user-agent': 'BCHomeMatchBot/1.0 (+contact: support@bchomeonline.ca)',
       accept: source.source_type === 'json' ? 'application/json' : 'text/html, application/rss+xml, application/xml',
     },
   });
@@ -302,7 +302,7 @@ async function getMatchingListings(filters: Record<string, string>) {
   return [
     ...(ownedResult.data ?? []).map((listing) => ({
       ...listing,
-      source_name: 'HouseMatch',
+      source_name: 'BC Home Match',
       source_url: null,
       is_external: false,
     })),

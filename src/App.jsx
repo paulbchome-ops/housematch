@@ -125,7 +125,7 @@ function calculateProximityScore(distance, maxDistance) {
 function mapOwnedListing(listing) {
   return {
     ...listing,
-    source_name: 'HouseMatch',
+    source_name: 'BC Home Match',
     source_url: null,
     is_external: false,
   };
@@ -448,7 +448,7 @@ export default function App() {
       <header className="site-header">
         <div className="container nav-wrap">
           <div>
-            <h1>HouseMatch Vancouver</h1>
+            <h1>BC Home Match</h1>
             <p>Greater Vancouver Rental &amp; Property Marketplace</p>
           </div>
           <nav>
@@ -759,7 +759,7 @@ export default function App() {
         <section id="agents" className="container realtor-cta">
           <div>
             <h3>Are You a Realtor or Property Manager?</h3>
-            <p>Join HouseMatch Vancouver to market your listings, connect with qualified renters and buyers, and manage leads in one place.</p>
+            <p>Join BC Home Match to market your listings, connect with qualified renters and buyers, and manage leads in one place.</p>
           </div>
           <button className="button primary" onClick={() => (session ? setListingFormOpen(true) : setAuthOpen(true))}>
             Become a Partner
@@ -772,14 +772,14 @@ export default function App() {
       <footer id="contact" className="footer">
         <div className="container footer-grid">
           <div>
-            <h4>HouseMatch Vancouver</h4>
+            <h4>BC Home Match</h4>
             <p>A modern home search platform for Greater Vancouver renters, buyers, realtors, and property managers.</p>
           </div>
           <div><h5>Company</h5><p>About Us<br />Careers<br />Partner Program<br />Press</p></div>
           <div><h5>Resources</h5><p>Rental Guide<br />Buying Guide<br />Mortgage Calculator<br />Market Reports</p></div>
-          <div><h5>Contact</h5><p>Burnaby, British Columbia<br />support@housematchvancouver.ca<br />+1 (604) 555-2026</p></div>
+          <div><h5>Contact</h5><p>Burnaby, British Columbia<br />support@bchomeonline.ca</p></div>
         </div>
-        <small>© 2026 HouseMatch Vancouver. All rights reserved.</small>
+        <small>© 2026 BC Home Match. All rights reserved.</small>
       </footer>
 
       <AuthModal

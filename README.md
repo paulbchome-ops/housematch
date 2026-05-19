@@ -1,6 +1,6 @@
-# HouseMatch
+# BC Home Match
 
-HouseMatch is a React + Supabase starter app for a Greater Vancouver rental and property marketplace.
+BC Home Match is a React + Supabase starter app for a Greater Vancouver rental and property marketplace.
 
 ## What is included
 
