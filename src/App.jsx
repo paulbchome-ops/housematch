@@ -159,7 +159,10 @@ function mapExternalListing(listing) {
 }
 
 export default function App() {
-  const [route, setRoute] = useState(window.location.hash === '#search' ? 'search' : 'home');
+  const [route, setRoute] = useState(window.location.hash === '#search' ? 'search' : window.location.hash.startsWith('#listing/') ? 'listing' : 'home');
+  const [selectedListingId, setSelectedListingId] = useState(
+    window.location.hash.startsWith('#listing/') ? decodeURIComponent(window.location.hash.replace('#listing/', '')) : '',
+  );
   const [searchStep, setSearchStep] = useState(0);
   const [listings, setListings] = useState([]);
   const [filters, setFilters] = useState(defaultFilters);
@@ -180,6 +183,13 @@ export default function App() {
 
   useEffect(() => {
     function syncRoute() {
+      if (window.location.hash.startsWith('#listing/')) {
+        setSelectedListingId(decodeURIComponent(window.location.hash.replace('#listing/', '')));
+        setRoute('listing');
+        return;
+      }
+
+      setSelectedListingId('');
       setRoute(window.location.hash === '#search' ? 'search' : 'home');
     }
 
@@ -256,12 +266,6 @@ export default function App() {
       supabase.removeChannel(externalListingsChannel);
     };
   }, []);
-
-  useEffect(() => {
-    if (route === 'search') {
-      runListingSearch();
-    }
-  }, [route]);
 
   const scoredListings = useMemo(() => {
     const minPrice = toNumber(filters.minPrice);
@@ -485,7 +489,6 @@ export default function App() {
     event.preventDefault();
     window.location.hash = 'search';
     setRoute('search');
-    runListingSearch();
   }
 
   function goHome() {
@@ -495,6 +498,12 @@ export default function App() {
 
   const searchSteps = ['Basics', 'Priorities', 'Results'];
   const featuredListings = scoredListings.slice(0, 4);
+  const selectedListing = scoredListings.find((listing) => listing.id === selectedListingId)
+    || listings.find((listing) => listing.id === selectedListingId);
+
+  function listingHref(listing) {
+    return `#listing/${encodeURIComponent(listing.id)}`;
+  }
 
   function renderScoreBreakdown(listing) {
     const minPrice = toNumber(filters.minPrice);
@@ -540,8 +549,9 @@ export default function App() {
   }
 
   async function advanceSearchStep() {
-    if (searchStep >= searchSteps.length - 2) {
-      await runListingSearch(searchStep === searchSteps.length - 1);
+    if (searchStep === searchSteps.length - 1) {
+      runListingSearch(true);
+      return;
     }
 
     setSearchStep((current) => Math.min(searchSteps.length - 1, current + 1));
@@ -583,7 +593,64 @@ export default function App() {
       </header>
 
       <main>
-        {route === 'search' ? (
+        {route === 'listing' ? (
+          <section className="container detail-page">
+            <button className="text-button" type="button" onClick={goHome}>Back to home</button>
+            {selectedListing ? (
+              <article className="detail-layout">
+                <img className="detail-image" src={selectedListing.image_url} alt={selectedListing.title} />
+                <div className="detail-panel">
+                  <span className="eyebrow-dark">{selectedListing.listing_type === 'rent' ? 'For Rent' : 'For Sale'}</span>
+                  <h2>{selectedListing.title}</h2>
+                  <p className="detail-location">{selectedListing.city} · {selectedListing.source_name}</p>
+                  <strong className="detail-price">{formatPrice(selectedListing)}</strong>
+
+                  <div className="detail-facts">
+                    <span>{selectedListing.bedrooms} Beds</span>
+                    <span>{selectedListing.bathrooms} Baths</span>
+                    <span>{selectedListing.area_sqft.toLocaleString()} sqft</span>
+                    <span>{selectedListing.property_type.replaceAll('_', ' ')}</span>
+                  </div>
+
+                  <div className="detail-score-card">
+                    <div>
+                      <span>Overall score</span>
+                      <strong>{selectedListing.score}</strong>
+                    </div>
+                    {renderScoreBreakdown(selectedListing)}
+                  </div>
+
+                  <dl className="detail-data">
+                    <div>
+                      <dt>SkyTrain proximity</dt>
+                      <dd>{formatDistance(selectedListing.skyTrainDistance)}</dd>
+                    </div>
+                    <div>
+                      <dt>Work proximity</dt>
+                      <dd>{formatDistance(selectedListing.workDistance)} from {filters.workLocation}</dd>
+                    </div>
+                    <div>
+                      <dt>Listing source</dt>
+                      <dd>{selectedListing.source_name}</dd>
+                    </div>
+                  </dl>
+
+                  {selectedListing.source_url ? (
+                    <a className="button primary" href={selectedListing.source_url} target="_blank" rel="noreferrer">Open Original Listing</a>
+                  ) : (
+                    <button className="button primary" type="button">Contact About Listing</button>
+                  )}
+                </div>
+              </article>
+            ) : (
+              <div className="empty-state">
+                <h2>Listing not found</h2>
+                <p>This listing may no longer be active or has not loaded yet.</p>
+                <a className="button primary" href="#search">Search Listings</a>
+              </div>
+            )}
+          </section>
+        ) : route === 'search' ? (
           <section className="container search-page">
             <div className="search-page-header">
               <button className="text-button" type="button" onClick={goHome}>Back to home</button>
@@ -749,7 +816,7 @@ export default function App() {
                           {sortedListings.map((listing) => (
                             <tr key={listing.id}>
                               <td>
-                                <strong>{listing.title}</strong>
+                                <a className="listing-table-link" href={listingHref(listing)}>{listing.title}</a>
                                 <span>{listing.city} · {listing.bedrooms} beds · {listing.bathrooms} baths · {listing.source_name}</span>
                               </td>
                               <td>{formatPrice(listing)}</td>
@@ -774,8 +841,8 @@ export default function App() {
                   <button className="button ghost" type="button" onClick={() => setSearchStep((current) => Math.max(0, current - 1))} disabled={searchStep === 0}>
                     Back
                   </button>
-                  <button className="button primary" type="button" onClick={advanceSearchStep} disabled={isSearching}>
-                    {isSearching ? 'Searching...' : searchStep === searchSteps.length - 1 ? 'Refresh matches' : 'Next'}
+                  <button className="button primary" type="button" onClick={advanceSearchStep}>
+                    {searchStep === searchSteps.length - 1 ? (isSearching ? 'Refreshing...' : 'Refresh matches') : 'Next'}
                   </button>
                 </div>
               </section>
@@ -848,11 +915,13 @@ export default function App() {
           <div className="listing-grid">
             {featuredListings.map((listing) => (
               <article className="listing-card" key={listing.id}>
-                <img src={listing.image_url} alt={listing.title} />
+                <a href={listingHref(listing)} className="listing-image-link">
+                  <img src={listing.image_url} alt={listing.title} />
+                </a>
                 <span>{listing.listing_type === 'rent' ? 'For Rent' : 'For Sale'}</span>
                 <div>
                   <strong>{formatPrice(listing)}</strong>
-                  <h4>{listing.title}</h4>
+                  <h4><a href={listingHref(listing)}>{listing.title}</a></h4>
                   <p>{listing.city} · {listing.source_name}</p>
                   <footer>
                     <em>{listing.bedrooms} Beds</em>
@@ -867,7 +936,7 @@ export default function App() {
                   {listing.source_url ? (
                     <a className="button dark" href={listing.source_url} target="_blank" rel="noreferrer">View Source</a>
                   ) : (
-                    <button className="button dark">View Details</button>
+                    <a className="button dark" href={listingHref(listing)}>View Details</a>
                   )}
                 </div>
               </article>
