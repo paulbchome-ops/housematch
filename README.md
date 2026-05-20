@@ -29,6 +29,16 @@ npm install
 npm run dev
 ```
 
+## Seed Sample Listings
+
+To add local sample data to Supabase, set `SUPABASE_SERVICE_ROLE_KEY` in `.env`, apply the migrations, then run:
+
+```bash
+npm run seed:samples
+```
+
+This creates a `HouseMatch Sample Data` source and upserts sample rows into `external_listings`, so it is safe to run more than once.
+
 ## Notes
 
 - The browser app uses the publishable key only.
@@ -46,6 +56,27 @@ npm run scrape:listings
 ```
 
 The job reads enabled rows from `external_listing_sources`, records each attempt in `external_listing_import_runs`, and upserts normalized rows into `external_listings`.
+
+Sources can use Puppeteer for JavaScript-rendered pages by setting `adapter = 'puppeteer'`. For selector-based extraction, add a `config.selectors` object:
+
+```json
+{
+  "search_url_template": "https://example.com/search?q={query}&max_price={max_price}",
+  "wait_for_selector": ".listing-card",
+  "scroll_to_bottom": true,
+  "selectors": {
+    "item": ".listing-card",
+    "title": ".listing-title",
+    "price": ".listing-price",
+    "bedrooms": ".listing-beds",
+    "bathrooms": ".listing-baths",
+    "area_sqft": ".listing-sqft",
+    "city": ".listing-city",
+    "image_url": "img",
+    "source_url": "a"
+  }
+}
+```
 
 When a visitor starts or refreshes a property search, the app calls the `search-listings` Supabase Edge Function. The function scrapes enabled authorized sources, upserts fresh external listings, queries matching first-party and external rows, and returns those matches to the browser.
 

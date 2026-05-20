@@ -14,6 +14,17 @@ const supabase = createClient(supabaseUrl, serviceRoleKey, {
 
 const args = new Set(process.argv.slice(2));
 const pollIntervalMs = Number(process.env.SCRAPER_POLL_INTERVAL_MS || 15000);
+let puppeteer;
+
+process.on('unhandledRejection', (error) => {
+  const message = error instanceof Error ? error.message : String(error);
+  if (message.includes('Target closed') || message.includes('process') || message.includes('Protocol error')) {
+    console.error(`Puppeteer cleanup warning: ${message}`);
+    return;
+  }
+
+  throw error;
+});
 
 function textBetween(value, start, end) {
   const startIndex = value.indexOf(start);
@@ -69,6 +80,25 @@ function getByPath(value, path) {
   return path.split('.').reduce((current, key) => current?.[key], value);
 }
 
+async function getPuppeteer() {
+  if (!puppeteer) {
+    puppeteer = await import('puppeteer');
+  }
+
+  return puppeteer.default;
+}
+
+async function closeBrowser(browser) {
+  try {
+    await browser.close();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.includes('process') && !message.includes('Target closed')) {
+      throw error;
+    }
+  }
+}
+
 function buildSourceUrl(source, searchFilters = {}) {
   const template = source.config?.search_url_template;
   if (!template) return source.base_url;
@@ -88,7 +118,59 @@ function buildSourceUrl(source, searchFilters = {}) {
   );
 }
 
+async function fetchSourceWithPuppeteer(source, searchFilters = {}) {
+  const sourceUrl = buildSourceUrl(source, searchFilters);
+  const puppeteerModule = await getPuppeteer();
+  const browser = await puppeteerModule.launch({
+    headless: 'new',
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  });
+
+  try {
+    const page = await browser.newPage();
+    await page.setUserAgent('HouseMatchBot/1.0 (+contact: support@housematchvancouver.ca)');
+    await page.setViewport({ width: 1366, height: 900 });
+    await page.goto(sourceUrl, {
+      waitUntil: source.config?.wait_until || 'networkidle2',
+      timeout: Number(source.config?.timeout_ms || 45000),
+    });
+
+    if (source.config?.wait_for_selector) {
+      await page.waitForSelector(source.config.wait_for_selector, {
+        timeout: Number(source.config?.selector_timeout_ms || 15000),
+      });
+    }
+
+    if (source.config?.scroll_to_bottom) {
+      await page.evaluate(async () => {
+        await new Promise((resolve) => {
+          let totalHeight = 0;
+          const distance = 500;
+          const timer = setInterval(() => {
+            const scrollHeight = document.body.scrollHeight;
+            window.scrollBy(0, distance);
+            totalHeight += distance;
+
+            if (totalHeight >= scrollHeight) {
+              clearInterval(timer);
+              resolve();
+            }
+          }, 250);
+        });
+      });
+    }
+
+    return page.content();
+  } finally {
+    await closeBrowser(browser);
+  }
+}
+
 async function fetchSource(source, searchFilters = {}) {
+  if (source.adapter === 'puppeteer') {
+    return fetchSourceWithPuppeteer(source, searchFilters);
+  }
+
   const sourceUrl = buildSourceUrl(source, searchFilters);
   const response = await fetch(sourceUrl, {
     headers: {
@@ -154,6 +236,10 @@ function parseRssListings(xml, source) {
 
 function parseHtmlListings(html, source) {
   const config = source.config ?? {};
+  if (source.adapter === 'puppeteer' && config.selectors) {
+    throw new Error(`Source "${source.name}" uses Puppeteer selectors. Use parsePuppeteerListings instead.`);
+  }
+
   if (!config.item_regex) {
     throw new Error(`Source "${source.name}" needs config.item_regex for generic HTML parsing.`);
   }
@@ -178,6 +264,84 @@ function parseHtmlListings(html, source) {
   }
 
   return listings.filter((listing) => listing.title && listing.source_url);
+}
+
+async function parsePuppeteerListings(source, searchFilters = {}) {
+  const sourceUrl = buildSourceUrl(source, searchFilters);
+  const selectors = source.config?.selectors;
+
+  if (!selectors?.item) {
+    throw new Error(`Source "${source.name}" needs config.selectors.item for Puppeteer parsing.`);
+  }
+
+  const puppeteerModule = await getPuppeteer();
+  const browser = await puppeteerModule.launch({
+    headless: 'new',
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  });
+
+  try {
+    const page = await browser.newPage();
+    await page.setUserAgent('HouseMatchBot/1.0 (+contact: support@housematchvancouver.ca)');
+    await page.setViewport({ width: 1366, height: 900 });
+    await page.goto(sourceUrl, {
+      waitUntil: source.config?.wait_until || 'networkidle2',
+      timeout: Number(source.config?.timeout_ms || 45000),
+    });
+
+    if (source.config?.wait_for_selector || selectors.item) {
+      await page.waitForSelector(source.config?.wait_for_selector || selectors.item, {
+        timeout: Number(source.config?.selector_timeout_ms || 15000),
+      });
+    }
+
+    if (source.config?.scroll_to_bottom) {
+      await page.evaluate(async () => {
+        await new Promise((resolve) => {
+          let totalHeight = 0;
+          const distance = 500;
+          const timer = setInterval(() => {
+            const scrollHeight = document.body.scrollHeight;
+            window.scrollBy(0, distance);
+            totalHeight += distance;
+
+            if (totalHeight >= scrollHeight) {
+              clearInterval(timer);
+              resolve();
+            }
+          }, 250);
+        });
+      });
+    }
+
+    return page.$$eval(selectors.item, (items, selectorConfig) => {
+      const readText = (root, selector) => {
+        if (!selector) return undefined;
+        return root.querySelector(selector)?.textContent?.trim();
+      };
+      const readAttribute = (root, selector, attribute) => {
+        if (!selector) return undefined;
+        return root.querySelector(selector)?.getAttribute(attribute);
+      };
+
+      return items.map((item) => ({
+        external_id:
+          readAttribute(item, selectorConfig.external_id, 'data-id') ||
+          readAttribute(item, selectorConfig.source_url, 'href') ||
+          readText(item, selectorConfig.title),
+        title: readText(item, selectorConfig.title),
+        price: readText(item, selectorConfig.price),
+        bedrooms: readText(item, selectorConfig.bedrooms),
+        bathrooms: readText(item, selectorConfig.bathrooms),
+        area_sqft: readText(item, selectorConfig.area_sqft),
+        city: readText(item, selectorConfig.city),
+        image_url: readAttribute(item, selectorConfig.image_url, 'src'),
+        source_url: readAttribute(item, selectorConfig.source_url, 'href'),
+      }));
+    }, selectors);
+  } finally {
+    await closeBrowser(browser);
+  }
 }
 
 async function createRun(source) {
@@ -205,9 +369,12 @@ async function scrapeSource(source, searchFilters = {}) {
     throw new Error(`Source "${source.name}" requires permission before automated collection.`);
   }
 
-  const payload = await fetchSource(source, searchFilters);
-  const parsed =
-    source.source_type === 'json'
+  const payload = source.adapter === 'puppeteer' && source.config?.selectors
+    ? null
+    : await fetchSource(source, searchFilters);
+  const parsed = source.adapter === 'puppeteer' && source.config?.selectors
+    ? await parsePuppeteerListings(source, searchFilters)
+    : source.source_type === 'json'
       ? parseJsonListings(payload, source)
       : source.source_type === 'rss'
         ? parseRssListings(payload, source)
